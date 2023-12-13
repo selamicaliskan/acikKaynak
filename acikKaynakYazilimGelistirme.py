@@ -1,58 +1,61 @@
+from flask import Flask, request
+from flask_restful import Api, Resource
+import pandas as pd
 
-from keras_facenet import FaceNet
-import cv2
-import numpy as np
-import pickle
-import faceDetector_s
+app = Flask(__name__)
+api = Api(app)
+
+class Users(Resource):
+    def get(self):
+        data = pd.read_csv('users.csv')
+        data = data.to_dict('records')
+        return {'data' : data}, 200
+
+    def post(self):
+        json = request.get_json()
+        req_data = pd.DataFrame({
+            'name'      : [json['name']],
+            'age'       : [json['age']],
+            'city'      : [json['city']]
+        })
+        data = pd.read_csv('users.csv')
+        data = pd.concat([data, req_data], ignore_index=True)
+        data.to_csv('users.csv', index=False)
+        return {'message' : 'Record successfully added.'}, 200
+
+    def delete(self):
+        name = request.args['name']
+        data = pd.read_csv('users.csv')
+
+        if name in data['name'].values:
+            data = data[data['name'] != name]
+            data.to_csv('users.csv', index=False)
+            return {'message': 'Record successfully deleted.'}, 200
+        else:
+            return {'message': 'Record not found.'}, 404
+
+class Cities(Resource):
+    def get(self):
+        data = pd.read_csv('users.csv',usecols=[2])
+        data = data.to_dict('records')
+        return {'data' : data}, 200
+
+class Name(Resource):
+    def get(self,name):
+        data = pd.read_csv('users.csv')
+        data = data.to_dict('records')
+        for entry in data:
+            if entry['name'] == name :
+                return {'data' : entry}, 200
+        return {'message' : 'No entry found with this name !'}, 404
 
 
-
-class FaceRecognizer_s:
-
-    def __init__(self):
-        self.video_capture = cv2.VideoCapture(0)
-        self.video_capture.set(cv2.CAP_PROP_FRAME_WIDTH, 1080)
-        self.video_capture.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
-        self.identity=None
-        self.x1, self.y1, self.x2,self.y2=None, None, None, None
-        self.MyFaceNet = FaceNet()
-        self.frame=None
-        self.faceDetector=faceDetector_s.FaceDetector_s(self.frame)
+# Add URL endpoints
+api.add_resource(Users, '/users')
+api.add_resource(Cities, '/cities')
+api.add_resource(Name, '/<string:name>')
 
 
-    def read_database(self,filename):
-        myFile = open(filename, 'rb')
-        database = pickle.load(myFile)
-        myFile.close()
-        return database
-
-    def read_camera(self):
-        ret,frame=self.video_capture.read()
-        return ret,frame
-
-
-    def recognizer_s(self):
-
-        """kamerayı okur.
-        yüzleri tespit eder.
-        özellik vektörü elde eder.
-        veritabanındaki vektörler ile karşılaştırıp identity atar
-        returns: x1, y1, x2, y2, identity
-        """
-
-        database=self.read_database('data.pkl')
-
-        ret,self.frame=self.read_camera()
-        if ret:
-            face, self.x1, self.y1, self.x2, self.y2=self.faceDetector.detect_faces(self.frame,coor=True)
-            face = np.expand_dims(face, axis=0)
-            signature = self.MyFaceNet.embeddings(face)
-
-            min_dist = 100
-            self.identity = ' '
-            for key, value in database.items():
-                dist = np.linalg.norm(value - signature)
-                if dist < min_dist:
-                    min_dist = dist
-                    self.identity = key
-            return self.identity, self.x1, self.y1, self.x2, self.y2
+if __name__ == '__main__':
+    # app.run(host="0.0.0.0", port=5000)
+    app.run()
